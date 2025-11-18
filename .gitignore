@@ -1,0 +1,23 @@
+# Node build artifacts
+node_modules/
+dist/
+build/
+
+# Logs and runtime files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# Environment and local config
+.env
+.env.local
+.env.*
+.n8n
+
+# OS/editor cruft
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
