@@ -47,8 +47,10 @@ n8n-docker-project
 ### Accessing n8n
 Once the containers are up and running, you can access the n8n interface by navigating to `http://localhost:5678` in your web browser.
 
-### Data Directory Permissions
-Before the `n8n` container starts, a lightweight helper service fixes the ownership of the `docker/data` directory using the `HOST_UID` and `HOST_GID` values from `.env`. Adjust these values if your local user uses a different UID/GID to avoid permission errors such as `EACCES: permission denied, open '/home/node/.n8n/config'`.
+### Data Directory Permissions & DB storage
+Before the `n8n` container starts, a lightweight helper service fixes the ownership of the `docker/data` directory using the `HOST_UID` and `HOST_GID` values from `.env`. Adjust these values if your local user uses a different UID/GID to avoid permission errors such as `EACCES: permission denied, open '/home/node/.n8n/config'`. n8n also enforces safe permissions on the generated `config` file automatically via `N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true`.
+
+PostgreSQL 18+ now stores its internal data under `/var/lib/postgresql/<major>`; the compose file mounts the named volume at `/var/lib/postgresql` (not `/var/lib/postgresql/data`) to follow that expectation. If you have existing data from an older setup, follow the upstream migration notes before switching volumes.
 
 ## Workflow Example
 The project includes a sample workflow located at `src/workflows/example-workflow.json`. This file defines the nodes and connections for automation tasks.

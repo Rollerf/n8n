@@ -31,6 +31,7 @@ services:
       - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
       - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
       - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
     ports:
       - '5678:5678'
     extra_hosts:
@@ -51,7 +52,7 @@ services:
       - POSTGRES_USER=${DB_POSTGRESDB_USER}
       - POSTGRES_PASSWORD=${DB_POSTGRESDB_PASSWORD}
     volumes:
-      - db_data:/var/lib/postgresql/data
+      - db_data:/var/lib/postgresql
 
 volumes:
   db_data:
