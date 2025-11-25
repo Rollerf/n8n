@@ -12,7 +12,7 @@ n8n-docker-project
 ├── docker
 │   ├── Dockerfile
 │   └── docker-compose.yml
-├── .env
+├── .env.example
 ├── README.md
 ```
 
@@ -31,20 +31,30 @@ n8n-docker-project
    cd n8n-docker-project
    ```
 
-3. **Create the Docker Environment**
-   Run the following command to build the Docker image and start the n8n application along with any defined services:
+3. **Configure the Environment**
+   Copy the example environment file and adjust the values for your setup (make sure `N8N_ENCRYPTION_KEY` is a random, private string—`openssl rand -hex 16` is one way to generate it—and that `HOST_UID`/`HOST_GID` match your local user):
+   ```bash
+   cp .env.example .env
    ```
-   docker-compose up
+   Edit `.env` with your preferred values.
+
+4. **Create the Docker Environment**
+   Run the following command from the project root to build the Docker image and start the n8n application along with any defined services:
+   ```bash
+   docker compose -f docker/docker-compose.yml up -d
    ```
 
 ### Accessing n8n
 Once the containers are up and running, you can access the n8n interface by navigating to `http://localhost:5678` in your web browser.
 
+### Data Directory Permissions
+Before the `n8n` container starts, a lightweight helper service fixes the ownership of the `docker/data` directory using the `HOST_UID` and `HOST_GID` values from `.env`. Adjust these values if your local user uses a different UID/GID to avoid permission errors such as `EACCES: permission denied, open '/home/node/.n8n/config'`.
+
 ## Workflow Example
 The project includes a sample workflow located at `src/workflows/example-workflow.json`. This file defines the nodes and connections for automation tasks.
 
 ## Configuration
-- The `.env` file contains environment variables for configuring the n8n application, such as database connection strings and API keys.
+- The `.env` file contains environment variables for configuring the n8n application, such as database connection strings, encryption key, and host UID/GID used to set the proper permissions on the shared data directory.
 - The `docker/Dockerfile` defines the instructions for building the Docker image for the n8n application.
 - The `docker/docker-compose.yml` file is used to define and run multi-container Docker applications.
 

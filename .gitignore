@@ -13,8 +13,6 @@ pnpm-debug.log*
 # Environment and local config
 .env
 .env.local
-.env.*
-.env.example
 .n8n
 docker/data/
 
