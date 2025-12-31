@@ -33,6 +33,8 @@ services:
       - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
       - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
       - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
+      - TZ=Europe/Madrid
+      - GENERIC_TIMEZONE=Europe/Madrid
     ports:
       - '5678:5678'
     extra_hosts:
