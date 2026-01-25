@@ -1,0 +1,51 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - n8n-deployment.yaml
+  - n8n-ingress.yaml
+  - n8n-pvc.yaml
+  - n8n-service.yaml
+  - postgres-deployment.yaml
+  - postgres-pvc.yaml
+  - postgres-service.yaml
+  - n8n-secret.yaml
+
+configMapGenerator:
+  - name: n8n-config
+    envs:
+      - n8n-config.env
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+replacements:
+  - source:
+      kind: ConfigMap
+      name: n8n-config
+      fieldPath: data.N8N_DOMAIN
+    targets:
+      - select:
+          kind: Ingress
+          name: n8n
+        fieldPaths:
+          - spec.rules.0.host
+      - select:
+          kind: ConfigMap
+          name: n8n-config
+        fieldPaths:
+          - data.N8N_HOST
+      - select:
+          kind: ConfigMap
+          name: n8n-config
+        fieldPaths:
+          - data.N8N_API_BASE_URL
+          - data.N8N_PUBLIC_API_BASE_URL
+          - data.N8N_EDITOR_BASE_URL
+          - data.N8N_WEBHOOK_URL
+          - data.N8N_WEBHOOK_TUNNEL_URL
+          - data.WEBHOOK_URL
+          - data.WEBHOOK_TUNNEL_URL
+        options:
+          delimiter: "/"
+          index: 2

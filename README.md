@@ -1,7 +1,7 @@
-# n8n Docker Project
+# n8n k3s Project
 
 ## Overview
-This project sets up a local development environment for n8n using Docker. It includes a sample workflow, Docker configuration files, and environment settings to facilitate easy development and deployment.
+This project provides Kubernetes manifests for running n8n on k3s. It includes a sample workflow and environment settings to facilitate deployment.
 
 ## Project Structure
 ```
@@ -9,56 +9,128 @@ n8n-docker-project
 ├── src
 │   └── workflows
 │       └── example-workflow.json
-├── docker
-│   ├── Dockerfile
-│   └── docker-compose.yml
-├── .env.example
+├── k8s
+│   ├── *.yaml
+│   ├── kustomization.yaml
+│   └── n8n-config.env.example
 ├── README.md
 ```
 
 ## Getting Started
 
 ### Prerequisites
-- Ensure you have Docker and Docker Compose installed on your machine.
+- Ensure you have k3s running and `kubectl` configured for your cluster.
 
-### Local Development Setup
-1. **Clone the Repository**
-   Clone this repository to your local machine.
+### k3s Deployment
+1. **Prepare local config files**
+   Copy `k8s/n8n-config.env.example` to `k8s/n8n-config.env`, set `N8N_DOMAIN` (hostname only, no scheme), and adjust non-domain settings (leave the `DOMAIN` placeholders as-is). Copy `k8s/n8n-secret.example.yaml` to `k8s/n8n-secret.yaml` and set credentials plus the `N8N_ENCRYPTION_KEY`. Adjust PVC sizes in `k8s/n8n-pvc.yaml` and `k8s/postgres-pvc.yaml` if needed.
 
-2. **Navigate to Project Directory**
-   Open a terminal and navigate to the project root directory:
-   ```
-   cd n8n-docker-project
-   ```
-
-3. **Configure the Environment**
-   Copy the example environment file and adjust the values for your setup (make sure `N8N_ENCRYPTION_KEY` is a random, private string—`openssl rand -hex 16` is one way to generate it—and that `HOST_UID`/`HOST_GID` match your local user):
+2. **Apply Manifests**
    ```bash
-   cp .env.example .env
+   kubectl apply -k k8s/
    ```
-   Edit `.env` with your preferred values.
 
-4. **Create the Docker Environment**
-   Run the following command from the project root to build the Docker image and start the n8n application along with any defined services:
+3. **Check Status**
    ```bash
-   docker compose -f docker/docker-compose.yml up -d
+   kubectl get pods
+   kubectl get svc n8n
    ```
 
-### Accessing n8n
-Once the containers are up and running, you can access the n8n interface by navigating to `http://localhost:5678` in your web browser.
+4. **Access n8n**
+   On k3s, the `n8n` Service is `LoadBalancer` type, which exposes port `5678` on the node IP by default. If you use the Ingress, point the `N8N_DOMAIN` from `k8s/n8n-config.env` to your node IP (or add an `/etc/hosts` entry) and access `https://<domain>`.
+
+### Uninstall (k3s)
+Remove all resources created by this repo:
+```bash
+kubectl delete -k k8s/
+```
+
+If you also want to delete data volumes:
+```bash
+kubectl delete pvc n8n-data postgres-data
+kubectl get pv
+```
+
+If you deployed into a dedicated namespace, delete it instead:
+```bash
+kubectl delete namespace <your-namespace>
+```
 
 ### Data Directory Permissions & DB storage
-Before the `n8n` container starts, a lightweight helper service fixes the ownership of the `docker/data` directory using the `HOST_UID` and `HOST_GID` values from `.env`. Adjust these values if your local user uses a different UID/GID to avoid permission errors such as `EACCES: permission denied, open '/home/node/.n8n/config'`. n8n also enforces safe permissions on the generated `config` file automatically via `N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true`.
+In k3s, the `n8n` Deployment uses an init container to `chown` the PVC to UID/GID `1000`, and n8n also enforces safe permissions on the generated `config` file automatically via `N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true`.
 
-PostgreSQL 18+ now stores its internal data under `/var/lib/postgresql/<major>`; the compose file mounts the named volume at `/var/lib/postgresql` (not `/var/lib/postgresql/data`) to follow that expectation. If you have existing data from an older setup, follow the upstream migration notes before switching volumes.
+PostgreSQL 18+ now stores its internal data under `/var/lib/postgresql/<major>`; the Postgres deployment mounts the PVC at `/var/lib/postgresql` (not `/var/lib/postgresql/data`) to follow that expectation. If you have existing data from an older setup, follow the upstream migration notes before switching volumes.
+
+## Database Backup and Restore (k3s)
+When applying a backup, scale down n8n first to avoid writes during the restore.
+
+1. Scale n8n down:
+   ```bash
+   kubectl -n default scale deploy n8n --replicas=0
+   ```
+2. Find the Postgres pod and password:
+   ```bash
+   NS=default
+   POD=$(kubectl -n "$NS" get pod -l app=n8n-postgres -o jsonpath='{.items[0].metadata.name}')
+   DB_PASS=$(kubectl -n "$NS" get secret n8n-secrets -o jsonpath='{.data.DB_POSTGRESDB_PASSWORD}' | base64 -d)
+   ```
+3. Backup the database (save on your local machine):
+   ```bash
+   kubectl -n "$NS" exec -i "$POD" -- env PGPASSWORD="$DB_PASS" \
+     pg_dump -U n8n_user n8n > n8n_backup.sql
+   ```
+4. Drop and recreate the database:
+   ```bash
+   kubectl -n "$NS" exec -i "$POD" -- env PGPASSWORD="$DB_PASS" \
+     psql -U n8n_user -d postgres -v ON_ERROR_STOP=1 \
+     -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='n8n';" \
+     -c "DROP DATABASE IF EXISTS n8n;" \
+     -c "CREATE DATABASE n8n;"
+   ```
+5. Restore the backup:
+   ```bash
+   kubectl -n "$NS" exec -i "$POD" -- env PGPASSWORD="$DB_PASS" \
+     psql -U n8n_user -d n8n -v ON_ERROR_STOP=1 < /path/to/n8n_backup.sql
+   ```
+6. Scale n8n up:
+   ```bash
+   kubectl -n "$NS" scale deploy n8n --replicas=1
+   ```
+
+## Backup (Docker Compose)
+For the Docker setup in `docker/docker-compose.yml`, back up the Postgres database, the n8n data directory, and your `.env` (especially `N8N_ENCRYPTION_KEY`).
+
+1. Stop n8n to avoid writes during backup:
+   ```bash
+   docker compose -f docker/docker-compose.yml stop n8n
+   ```
+2. Dump the Postgres database:
+   ```bash
+   mkdir -p backups
+   docker compose -f docker/docker-compose.yml exec -T db \
+     sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' \
+     > backups/n8n_db_backup.sql
+   ```
+3. Archive the n8n data directory:
+   ```bash
+   tar -czf backups/n8n_data.tar.gz -C docker data
+   ```
+4. Back up your `.env` file (contains `N8N_ENCRYPTION_KEY`):
+   ```bash
+   cp .env backups/n8n_env_backup.env
+   ```
+5. Start n8n again:
+   ```bash
+   docker compose -f docker/docker-compose.yml start n8n
+   ```
 
 ## Workflow Example
 The project includes a sample workflow located at `src/workflows/example-workflow.json`. This file defines the nodes and connections for automation tasks.
 
 ## Configuration
-- The `.env` file contains environment variables for configuring the n8n application, such as database connection strings, encryption key, and host UID/GID used to set the proper permissions on the shared data directory.
-- The `docker/Dockerfile` defines the instructions for building the Docker image for the n8n application.
-- The `docker/docker-compose.yml` file is used to define and run multi-container Docker applications.
+- `k8s/kustomization.yaml` generates the ConfigMap from `k8s/n8n-config.env`, replaces `DOMAIN` placeholders in `k8s/n8n-config.env` and `k8s/n8n-ingress.yaml` using `N8N_DOMAIN`, and applies `k8s/n8n-secret.yaml` for credentials and the `N8N_ENCRYPTION_KEY`.
+- `k8s/n8n-config.env` is gitignored, so you can change the domain once without touching tracked files.
+- The manifests in `k8s/` define the deployments, services, and PVCs for n8n and PostgreSQL.
 
 ## Contributing
 Feel free to submit issues or pull requests for improvements or bug fixes.

@@ -15,6 +15,9 @@ pnpm-debug.log*
 .env.local
 .n8n
 docker/data/
+k8s/n8n-config.env
+k8s/n8n-configmap.yaml
+k8s/n8n-secret.yaml
 
 # OS/editor cruft
 .DS_Store
