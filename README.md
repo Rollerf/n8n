@@ -90,7 +90,7 @@ When applying a backup, scale down n8n first to avoid writes during the restore.
 5. Restore the backup:
    ```bash
    kubectl -n "$NS" exec -i "$POD" -- env PGPASSWORD="$DB_PASS" \
-     psql -U n8n_user -d n8n -v ON_ERROR_STOP=1 < /path/to/n8n_backup.sql
+     psql -U n8n_user -d n8n -v ON_ERROR_STOP=1 < ./backups/n8n_db_backup.sql
    ```
 6. Scale n8n up:
    ```bash
